@@ -898,7 +898,7 @@ function showUseVideoModal() {
       <h3>🎬 实验操作教学视频</h3>
       <div style="position: relative; padding-bottom: 56.25%; height: 0; margin:15px 0;">
         <video style="position:absolute; top:0; left:0; width:100%; height:100%; border-radius:8px;" controls>
-         <source src="https://raw.githubusercontent.com/258930/video-upload/main/caozuo.mp4" type="video/mp4">
+         <source src="caozuo.mp4" type="video/mp4">
         </video>
       </div>
       <button id="close-use-video" class="btn-blue">关闭视频，开始实验</button>
