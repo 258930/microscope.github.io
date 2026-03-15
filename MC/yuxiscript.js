@@ -1242,7 +1242,8 @@ document.getElementById('submitEquip').onclick = () => {
             state.answeredCount++;
             hintEl.style.display = 'none';
             resultEl.style.display = 'block';
-            resultEl.innerText = `✅ 回答正确！剩余${state.currentQuestions.length - state.answeredCount}道题`;
+            resultEl.innerText = `✅ 能根据实验要求，正确选用双面刀片，器材选择准确。`;
+           // resultEl.innerText = `✅ 回答正确！剩余${state.currentQuestions.length - state.answeredCount}道题`;
             if (remainEl) remainEl.innerText = state.currentQuestions.length - state.answeredCount;
 
             setTimeout(() => {
@@ -1262,10 +1263,10 @@ document.getElementById('submitEquip').onclick = () => {
                 } else {
                     renderQuestion(questionIndex + 1);
                 }
-            }, 1000);
+            }, 2000);
         } else {
             hintEl.style.display = 'block';
-            hintEl.innerText = '❌ 答案错误，请重新选择！';
+            hintEl.innerText = '❌ 未正确选取实验所需的双面刀片，错误选用单面刀片，实验器材选择不符合要求。';
             hintEl.style.color = '#dc3545';
             hintEl.style.textAlign = 'center';
         }
