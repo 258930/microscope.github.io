@@ -4,6 +4,133 @@
     <meta charset="UTF-8">
     <title>3D高仿真虚拟显微镜实验室</title>
     <style>
+      /* 统一弹窗样式 */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 20000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    max-width: 600px;
+    width: 90%;
+    background: #2a2a3a;
+    border-radius: 8px;
+    padding: 25px;
+    position: relative;
+    z-index: 20001;
+    border: 2px solid #4CAF50;
+    box-shadow: 0 0 30px rgba(76,175,80,0.3);
+    color: white;
+}
+
+.modal-content h3 {
+    color: #4CAF50;
+    margin-bottom: 20px;
+    font-size: 20px;
+    border-bottom: 2px solid #4CAF50;
+    padding-bottom: 10px;
+}
+
+.quiz-option {
+    background: #1a1a2a;
+    border: 1px solid #3a3a4a;
+    color: white;
+    padding: 12px 15px;
+    margin: 8px 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quiz-option:hover {
+    background: #3a3a4a;
+    border-color: #4CAF50;
+    transform: translateX(5px);
+}
+
+.quiz-option.selected {
+    background: #4CAF50;
+    border-color: #4CAF50;
+}
+
+#quiz-hint, #quiz-result {
+    margin: 15px 0;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+#quiz-hint {
+    background: rgba(220, 53, 69, 0.2);
+    color: #ff6b6b;
+}
+
+#quiz-result {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+}
+
+#quiz-close {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 15px;
+    width: 100%;
+}
+
+#quiz-close:hover {
+    background: #45a049;
+}
+
+#image-answer-input {
+    width: 100%;
+    padding: 10px;
+    background: #1a1a2a;
+    border: 1px solid #3a3a4a;
+    color: white;
+    border-radius: 4px;
+    margin: 10px 0;
+}
+
+#submit-image-answer {
+    width: 100%;
+    padding: 10px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#submit-image-answer:hover {
+    background: #45a049;
+}
+
+.btn-blue {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-blue:hover {
+    background: #45a049;
+}
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; font-family: 'Arial', sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; }
@@ -179,6 +306,13 @@
     <div class="btn-group">
         <button class="btn" id="placeSlide" style="background:#0099ff;">✅ 放置载玻片</button>
     </div>
+    <!-- 新增：清理还原按钮 -->
+    <div class="control-group">
+        <label>🧹 实验结束清理还原</label>
+        <div class="btn-group">
+            <button class="btn" id="cleanupBtn" style="background:#ff9800;">🧹 清理还原</button>
+        </div>
+    </div>
 </div>
         <!-- <div class="control-group">
             <label>载物台 (样本位置)</label>
@@ -200,6 +334,19 @@
         <!-- 操作日志 -->
 
     </div>
+        <!-- 题目弹窗 -->
+<div id="quiz-modal" class="modal">
+    <div class="modal-content">
+        <h3>📝 显微镜操作小测验</h3>
+        <div id="quiz-content"></div>
+        <div id="quiz-hint" style="display: none;"></div>
+        <div id="quiz-result" style="display: none;"></div>
+        <button id="quiz-close" style="display: none;">关闭，继续实验</button>
+    </div>
+</div>
+
+<!-- 视频弹窗 -->
+<div id="operation-video-modal" class="modal" style="display: none;"></div>
     <!-- 操作日志 → 页面最右上角 -->
 <div style="
     position: fixed;
@@ -309,8 +456,379 @@
         let currentObjective = 0;
         let stagePosition = { x: 0, y: 0, z: 0 };
         let lightSource;
+        // 显微镜专用状态管理
+const microscopeState = {
+    isAnswering: false,
+    currentQuestions: [],
+    answeredCount: 0,
+    pendingOperation: null,
+    totalDeduction: 0,
+    details: [],
+     hasShownFocusQuiz: false,     // 调焦操作（粗准焦/细准焦）是否已弹过
+    hasShownSlideQuiz: false,     // 清理还原操作是否已弹过
+    hasxizhunQuiz : false,
+    haszhuanhuanqiQuiz : false,
+     hasShownCleanupQuiz: false
+};
+const RANDOM_QUESTION_COUNT = 2; 
+// 显微镜题库（分类7）
+const microscopeQuestionBank = {
+    7: [ // 分类7：显微镜调焦相关
+        {
+            id: 701,
+            title: "在用单目显微镜对光调光时，以下操作错误的是（　）",
+            options: [
+                "A. 转动转换器，使高倍物镜对准通光孔",
+                "B. 调节遮光器，用较大的光圈对准通光孔",
+                "C. 一只眼向目镜内看，转动反光镜，使反射光线经光圈、通光孔、物镜、镜筒到目镜",
+                "D. 以通过目镜看到明亮的圆形视野为宜"
+            ],
+            answer: "A"
+        },
+        {
+            id: 702,
+            title: "在使用单目显微镜进行对光调光时，正确的步骤是（　）①转动遮光器，使较大的光圈对准通光孔②转动转换器，使低倍物镜对准通光孔③一只眼向目镜内看④转动反光镜调出一个明亮的圆形视野",
+            options: [
+                "A. ①③②④",
+                "B. ②①③④",
+                "C. ③④②①",
+                "D. ③②①④"
+            ],
+            answer: "B"
+        },
+        {
+            id: 703,
+            title: "换成高倍物镜后，某同学觉得光线太暗，然后移动显微镜以寻找合适的光线（不移动显微镜）",
+            options: [
+                "A. 正确",
+                "B. 错误"
+            ],
+            answer: "A"
+        },
+          {
+            id: 704,
+            title: "对光时，应使高倍物镜对准通光孔（低倍物镜）",
+            options: [
+                "A. 正确",
+                "B. 错误"
+            ],
+            answer: "A"
+        }
+        // {
+        //     id: 704,
+        //     type: 'image',
+        //     src: './tiaojiao.png',  // 你可以替换成实际的图片
+        //     title: "观察图片，这是显微镜的什么结构？",
+        //     answer: "粗准焦螺旋"
+        // }
+    ],
+     8: [ // 分类8：清理还原相关
+        {
+            id: 801,
+            title: "某同学发现镜头上有个污点，用消过毒的卫生纸擦拭镜头（擦镜纸）",
+            options: [
+                "A. 正确",
+                "B. 错误",
+            ],
+            answer: "A"
+        },
+        {
+            id: 802,
+            title: "观察结束后，将物镜移到两旁，并将镜筒降到最低处",
+            options: [
+                "A. 正确",
+                "B. 错误",
+            ],
+            answer: "A"
+        }
+       
+    ],
+     9: [ //调焦观察
+        {
+            id: 901,
+            title: "在使用显微镜过程中，下列做法或说法错误的是（　）",
+            options: [
+                "A. 如果目镜是10×，物镜是40×，则总的放大倍数为400×",
+                "B. 发现视野较暗，转动遮光器换用大光圈",
+                "C. 放玻片时，将要观察的玻片标本移到视野中央",
+                "D. 下降镜筒时，眼睛注视目镜",
+
+            ],
+            answer: "D"
+        },
+        {
+            id: 902,
+            title: "观察时，一只眼闭合，一只眼注视目镜(睁开)",
+            options: [
+                "A. 正确",
+                "B. 错误",
+            ],
+            answer: "A"
+        },
+          {
+            id: 903,
+            title: "观察时，一只眼闭合，一只眼注视目镜(睁开)",
+            options: [
+                "A. 正确",
+                "B. 错误",
+            ],
+            answer: "A"
+        },
+          {
+            id: 904,
+            type: 'image',
+            src: './shiyong.png',  // 你可以替换成实际的图片
+            title: "选择正确选项",
+            answer: "D"
+        }
+       
+    ],
+    
+};
+
+// 随机出题函数
+function getRandomQuestions(category, n = 1) {
+    if (!microscopeQuestionBank[category]) {
+        console.warn(`分类${category}不存在，默认使用分类7`);
+        category = 7;
+    }
+    const categoryQuestions = JSON.parse(JSON.stringify(microscopeQuestionBank[category]));
+    const shuffled = categoryQuestions.sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, Math.min(n, categoryQuestions.length));
+}
+
+// 通用视频弹窗函数
+// 通用视频弹窗函数
+function showOperationVideoModal(videoSrc, title, category, operationType, callback = null) {
+    let videoModal = document.getElementById('operation-video-modal');
+    if (videoModal) {
+        videoModal.remove();
+    }
+
+    videoModal = document.createElement('div');
+    videoModal.id = 'operation-video-modal';
+    videoModal.className = 'modal';
+    
+    videoModal.style.cssText = `
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 20000;
+        justify-content: center;
+        align-items: center;
+    `;
+    
+    videoModal.innerHTML = `
+        <div class="modal-content" style="max-width: 900px; width: 90%; background: #2a2a3a; border-radius: 8px; padding: 20px; position: relative; z-index: 20001;">
+            <h3>🎬 ${title}</h3>
+            <div style="position: relative; padding-bottom: 56.25%; height: 0; margin:15px 0;">
+                <video id="operation-video" style="position:absolute; top:0; left:0; width:100%; height:100%; border-radius:8px;" controls autoplay>
+                    <source src="${videoSrc}" type="video/mp4">
+                </video>
+            </div>
+            <button id="close-operation-video" class="btn-blue" style="padding: 10px 20px; font-size: 16px;">关闭视频，开始答题</button>
+        </div>
+    `;
+    
+    document.body.appendChild(videoModal);
+    videoModal.style.display = 'flex';
+
+    document.getElementById('close-operation-video').onclick = () => {
+        const video = document.getElementById('operation-video');
+        if (video) {
+            video.pause();
+            video.currentTime = 0;
+        }
+        videoModal.style.display = 'none';
+        videoModal.remove();
         
-        // 你的模型部件UUID（完全保留）
+        // 保存当前操作类型，用于后续标记
+        window.currentOperationType = operationType;
+        
+        if (callback) {
+            callback();
+        } else {
+            showQuizModal(category);
+        }
+    };
+}
+// 弹窗弹题函数
+function showQuizModal(category = 7) {
+    microscopeState.currentQuestions = [];
+    microscopeState.answeredCount = 0;
+    microscopeState.isAnswering = true;
+    microscopeState.currentQuestions = getRandomQuestions(category, RANDOM_QUESTION_COUNT);
+    
+    window.currentMicroscopeCategory = category;
+    
+    const modal = document.getElementById('quiz-modal');
+    const content = document.getElementById('quiz-content');
+    modal.style.display = 'flex';
+    renderQuestion(0);
+}
+// 渲染题目
+function renderQuestion(index) {
+    if (index >= microscopeState.currentQuestions.length) return;
+    const question = microscopeState.currentQuestions[index];
+    const content = document.getElementById('quiz-content');
+     // 更新剩余题数显示
+    const remainEl = document.getElementById('quiz-remain');
+    if (remainEl) {
+        remainEl.innerText = `剩余 ${microscopeState.currentQuestions.length - index} 题`;
+    }
+    let html = '';
+
+    if(question.type === 'image'){
+        html = `
+            <div style="margin-bottom:15px;"><strong>${index + 1}/${microscopeState.currentQuestions.length} ${question.title}</strong></div>
+            <div style="text-align:center; margin-bottom:15px;">
+                <img src="${question.src}" style="max-width:100%; border-radius:8px; cursor:pointer;" 
+                     onclick="window.open('${question.src}','_blank')" title="点击放大查看">
+            </div>
+            <div style="margin:10px 0;">
+                <input type="text" id="image-answer-input" placeholder="请输入答案" 
+                       style="width:100%; padding:10px; font-size:16px; background:#1a1a2a; border:1px solid #3a3a4a; color:white; border-radius:4px;">
+            </div>
+            <button id="submit-image-answer" style="width:100%; padding:10px; background:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer;">
+                提交答案
+            </button>
+        `;
+    } else {
+        html = `
+            <div style="margin-bottom: 15px;"><strong>${index + 1}/${microscopeState.currentQuestions.length} ${question.title}</strong></div>
+            <div id="options-list">
+                ${question.options.map((opt) => `
+                    <div class="quiz-option" data-answer="${opt.charAt(0)}">${opt}</div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    content.innerHTML = html;
+    document.getElementById('quiz-hint').style.display = 'none';
+    document.getElementById('quiz-result').style.display = 'none';
+    document.getElementById('quiz-close').style.display = 'none';
+
+    if(!question.type){
+        const options = document.querySelectorAll('.quiz-option');
+        options.forEach(option => {
+            option.addEventListener('click', () => {
+                const userAnswer = option.getAttribute('data-answer');
+                checkAnswer(index, userAnswer);
+            });
+        });
+    } else {
+        document.getElementById('submit-image-answer').addEventListener('click', () => {
+            const input = document.getElementById('image-answer-input');
+            const userAnswer = input.value.trim();
+            checkAnswer(index, userAnswer);
+        });
+    }
+}
+
+// 答案校验
+// 答案校验
+function checkAnswer(questionIndex, userAnswer) {
+    if (!microscopeState.currentQuestions[questionIndex]) {
+        alert("⚠️ 题目数据异常，请重试！");
+        document.getElementById('quiz-modal').style.display = 'none';
+        microscopeState.isAnswering = false;
+        return;
+    }
+    const question = microscopeState.currentQuestions[questionIndex];
+    const hintEl = document.getElementById('quiz-hint');
+    const resultEl = document.getElementById('quiz-result');
+    const closeBtn = document.getElementById('quiz-close');
+    const content = document.getElementById('quiz-content');
+
+    const currentCategory = window.currentMicroscopeCategory || 7;
+
+    if (userAnswer === question.answer) {
+        microscopeState.answeredCount++;
+        hintEl.style.display = 'none';
+        resultEl.style.display = 'block';
+        
+        // 分类7的正确评价语
+        if (currentCategory === 7) {
+            const correctMessages = [
+                '✅ 你精准抓住了对光操作的核心误区！明确对光时必须用低倍物镜而非高倍物镜，对显微镜操作规范理解得很透彻，科学素养超棒！',
+                '✅ 你完美掌握了对光操作的完整流程！操作顺序丝毫不乱，实验操作能力很扎实！'
+            ];
+            const randomIndex = Math.floor(Math.random() * correctMessages.length);
+            resultEl.innerText = correctMessages[randomIndex];
+        }else  if(currentCategory === 8){
+            resultEl.innerText = `✅ 你严格遵守了实验结束后的器材整理规范，将显微镜复原、玻片清洁归位、实验台面擦拭干净，展现了良好的实验习惯和科学素养，为下一次实验做好了充分准备，值得点赞！`;
+        } else  if(currentCategory === 9){
+            resultEl.innerText = `✅ 完美掌握了显微镜操作的三大核心规范！不仅能精准判断下降镜筒时要注视物镜、大幅度调焦用粗准焦螺旋，还牢记了观察时双眼睁开的操作要求，实验细节和原理理解都扎实到位，科学操作素养超棒！`;
+        }else {
+            resultEl.innerText = `✅ 回答正确！`;
+        }
+
+        setTimeout(() => {
+            // 检查是否还有下一题
+            if (questionIndex + 1 < microscopeState.currentQuestions.length) {
+                // 还有下一题，渲染下一题
+                renderQuestion(questionIndex + 1);
+            } else {
+                // 所有题目都答完了
+                if (microscopeState.answeredCount >= microscopeState.currentQuestions.length) {
+                    content.innerHTML = `<h4 style="text-align:center; color:#4CAF50;">🎉 恭喜你答对了所有题目！可以继续操作显微镜</h4>`;
+                    resultEl.style.display = 'none';
+                    closeBtn.style.display = 'block';
+              // 在 checkAnswer 函数中，找到关闭按钮的回调部分
+closeBtn.onclick = () => {
+    document.getElementById('quiz-modal').style.display = 'none';
+    microscopeState.isAnswering = false;
+    
+    // 根据操作类型标记对应的状态
+    const operationType = window.currentOperationType;
+    if (operationType === 'focus') {
+        microscopeState.hasShownFocusQuiz = true;
+    } else if (operationType === 'slide') {
+        microscopeState.hasShownSlideQuiz = true;
+    }else if (operationType === 'cleanup') {
+        microscopeState.hasShownCleanupQuiz = true;
+    }
+    // 可以继续添加其他操作类型
+    
+    if(microscopeState.pendingOperation){
+        microscopeState.pendingOperation();
+        microscopeState.pendingOperation = null;
+    }
+};
+                }
+            }
+        }, 1500);
+    } else {
+        hintEl.style.display = 'block';
+        
+        // 分类7的错误评价语
+        if (currentCategory === 7) {
+            const errorMessages = [
+                '❌ 别灰心！这次只是混淆了对光时物镜的选择，记住 "对光用低倍，观察再换高" 的口诀，就能避开这个陷阱，下次一定能做对！',
+                '❌ 小失误而已！只要记住 "先转低倍物镜，再调大光圈，最后看目镜调反光镜" 的顺序，就能快速排对步骤，下次一定能拿到满分！'
+            ];
+            const randomIndex = Math.floor(Math.random() * errorMessages.length);
+            hintEl.innerText = errorMessages[randomIndex];
+        } else  if(currentCategory === 8){
+            hintEl.innerText = `❌ 这次实验观察结束后，忘记对实验器材和台面进行清理还原，会影响实验室的整洁和后续使用。下次记得及时将显微镜归位、清洁玻片并整理台面，养成良好的实验收尾习惯哦！`;
+        }else  if(currentCategory === 9){
+            hintEl.innerText = `❌ 没关系！易错点只是实验操作的小考验：误区 1：下降镜筒时注视物镜（易压碎玻片标本）
+            误区 2：混淆粗 / 细准焦螺旋功能（大幅度升降镜筒要靠粗准焦螺旋）
+            误区 3：观察时眯眼 / 闭眼（双眼睁开才能一边观察一边记录），只要记住 “降筒看物镜，大调粗螺旋，观察双眼睁” 的口诀，下次就能轻松避开所有陷阱，继续加油！`;
+        }else {
+            hintEl.innerText = '❌ 答案错误，请重新选择！';
+        }
+        
+        hintEl.style.color = '#ff6b6b';
+        hintEl.style.textAlign = 'center';
+    }
+}
+     // 你的模型部件UUID（完全保留）
         const PART_UUIDS = {
             coarseKnob: 'Cuzhunjiaoluoxuan-L',
             coarseKnobR: 'Cuzhunjiaoluoxuan-R',
@@ -552,42 +1070,159 @@ function switchObjective(index) {
 document.getElementById("placeSlide").onclick = () => {
     if (!state.slidePlaced) {
         state.slidePlaced = true;
-        addLog("✅ 载玻片已放置在载物台，可以观察物象");
-        document.getElementById("placeSlide").disabled = true;
-        document.getElementById("placeSlide").innerText = "✅ 已放置切片";
-        document.getElementById("placeSlide").style.background = "#4CAF50";
+         if (!microscopeState.hasShownSlideQuiz) {
+        // 
+        showQuizModal(9);
+        
+        microscopeState.pendingOperation = () => {
+            if (!state.slidePlaced) {
+                state.slidePlaced = true;
+                addLog("✅ 载玻片已放置在载物台，可以观察物象");
+                document.getElementById("placeSlide").disabled = true;
+                document.getElementById("placeSlide").innerText = "✅ 已放置切片";
+                document.getElementById("placeSlide").style.background = "#4CAF50";
+            }
+            // 操作执行完后，标记放置切片操作为已弹过
+            microscopeState.hasShownSlideQuiz = true;
+        };
+    } else {
+        // 已经弹过了，直接执行操作
+        if (!state.slidePlaced) {
+            state.slidePlaced = true;
+            addLog("✅ 载玻片已放置在载物台，可以观察物象");
+            document.getElementById("placeSlide").disabled = true;
+            document.getElementById("placeSlide").innerText = "✅ 已放置切片";
+            document.getElementById("placeSlide").style.background = "#4CAF50";
+        }
+    }
     }
 };
+    // 新增：清理还原按钮
+    document.getElementById("cleanupBtn").onclick = () => {
+        if(microscopeState.isAnswering) return;
+        
+        // 检查清理还原操作是否已经弹过
+        if (!microscopeState.hasShownCleanupQuiz) {
+            // 还没弹过，先播视频，视频关闭后弹题
+            showOperationVideoModal('qingli.mp4', '显微镜清理还原操作教学', 8, 'cleanup');
+            
+            microscopeState.pendingOperation = () => {
+                // 执行清理还原操作
+                performCleanup();
+                // 标记清理还原操作为已弹过
+                microscopeState.hasShownCleanupQuiz = true;
+            };
+        } else {
+            // 已经弹过了，直接执行清理还原操作
+            performCleanup();
+        }
+    };
+
+// 清理还原操作函数
+function performCleanup() {
+    // 1. 重置载玻片状态
+    state.slidePlaced = false;
+    document.getElementById("placeSlide").disabled = false;
+    document.getElementById("placeSlide").innerText = "✅ 放置载玻片";
+    document.getElementById("placeSlide").style.background = "#0099ff";
+    
+    // 2. 重置调焦状态
+    state.blurAmount = 20; // 重置模糊值
+    state.mirrorBrightness = 0.7; // 重置亮度
+    
+    // 3. 重置物镜到低倍（4×）
+    if (currentObjective !== 0) {
+        switchObjective(0);
+    }
+   
+    // 5. 重置反光镜角度
+    document.getElementById("mirrorAngle").value = 70;
+    const v = 0.7;
+    lightSource.intensity = 0.3 + v * 1.2;
+    if (modelNodes.mirrorPivot) {
+        const targetRot = (v - 0.5) * Math.PI / 3;
+        gsap.to(modelNodes.mirrorPivot.rotation, {
+            y: targetRot,
+            duration: 0.5,
+            ease: "power2.out"
+        });
+    }
+    document.getElementById("lightInfo").innerText = `💡 光源亮度：70%`;
+    
+    // 8. 日志提示
+    addLog("🧹 所有器械已清理还原到初始位置");
+}
+
             const coarse = document.getElementById("coarseFocus");
             // coarse.oninput = e => updateCoarseFocus(e.target.value/100);
     document.getElementById("coarseDown").onclick = () => { 
+       if(microscopeState.isAnswering) return;
+      // 检查调焦操作是否已经弹过
+    if (!microscopeState.hasShownFocusQuiz) {
+        // 还没弹过，先播视频，视频关闭后弹题
+        showOperationVideoModal('tiaojiao.mp4', '显微镜调焦操作教学', 7, 'focus');
+        
+        microscopeState.pendingOperation = () => {
+            adjustFocus(-2); 
+            adjustSlider("coarseFocus",-5);
+            flashKnob('coarseKnob');
+            flashKnob('coarseKnobR');
+            // 操作执行完后，标记调焦操作为已弹过
+            microscopeState.hasShownFocusQuiz = true;
+        };
+    } else {
+        // 已经弹过了，直接执行操作
         adjustFocus(-2); 
         adjustSlider("coarseFocus",-5);
         flashKnob('coarseKnob');
         flashKnob('coarseKnobR');
+    }
         //  state.blurAmount += 2;
         //  addLog("粗准焦：物象已变模糊");
     }
     
     document.getElementById("coarseUp").onclick = () => { 
+       if(microscopeState.isAnswering) return;
+      if (!microscopeState.hasShownFocusQuiz) {
+        showOperationVideoModal('tiaojiao.mp4', '显微镜调焦操作教学', 7, 'focus');
+        
+        microscopeState.pendingOperation = () => {
+            adjustFocus(2); 
+            adjustSlider("coarseFocus",5);
+            flashKnob('coarseKnob');
+            flashKnob('coarseKnobR');
+            microscopeState.hasShownFocusQuiz = true;
+        };
+    } else {
         adjustFocus(2); 
         adjustSlider("coarseFocus",5);
         flashKnob('coarseKnob');
         flashKnob('coarseKnobR');
-        // state.blurAmount -= 2
-        //  addLog("粗准焦：物象已变模糊");
+    }
     }
 
     const fine = document.getElementById("fineFocus");
     // fine.oninput = e => updateFineFocus(e.target.value/100);
     
     document.getElementById("fineDown").onclick = () => { 
+       if(microscopeState.isAnswering) return;
+    
+    if (!microscopeState.hasShownFocusQuiz) {
+        showOperationVideoModal('tiaojiao.mp4', '显微镜精细调焦教学', 7, 'focus');
+        
+        microscopeState.pendingOperation = () => {
+            adjustFocus(-0.8); 
+            adjustSlider("fineFocus",-3);
+            flashKnob('fineKnob');
+            flashKnob('fineKnobR');
+            microscopeState.hasShownFocusQuiz = true;
+        };
+    } else {
         adjustFocus(-0.8); 
         adjustSlider("fineFocus",-3);
         flashKnob('fineKnob');
         flashKnob('fineKnobR');
-          //state.blurAmount -= 1;
-
+    }
     if(state.blurAmount <= state.bestBlur) {
         addLog("✅ 细准焦：物象已调节至最清晰！");
     } else {
@@ -596,11 +1231,24 @@ document.getElementById("placeSlide").onclick = () => {
     }
     
     document.getElementById("fineUp").onclick = () => { 
+       if(microscopeState.isAnswering) return;
+    
+     if (!microscopeState.hasShownFocusQuiz) {
+        showOperationVideoModal('tiaojiao.mp4', '显微镜精细调焦教学', 7, 'focus');
+        
+        microscopeState.pendingOperation = () => {
+            adjustFocus(0.8); 
+            adjustSlider("fineFocus",3);
+            flashKnob('fineKnob');
+            flashKnob('fineKnobR');
+            microscopeState.hasShownFocusQuiz = true;
+        };
+    } else {
         adjustFocus(0.8); 
         adjustSlider("fineFocus",3);
         flashKnob('fineKnob');
         flashKnob('fineKnobR');
-        // state.blurAmount += 1;
+    }
 
     if(state.blurAmount <= state.bestBlur) {
         addLog("✅ 细准焦：物象已调节至最清晰！");
