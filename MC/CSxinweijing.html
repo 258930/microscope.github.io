@@ -261,7 +261,14 @@
     
     <div class="control-panel">
         <h3>🔬 虚拟显微镜实验室 </h3>
-        
+            
+    <!-- 新增：显微镜放置按钮 -->
+    <div class="control-group">
+        <label>🔧 显微镜放置</label>
+        <div class="btn-group">
+            <button class="btn" id="placeMicroscopeBtn" style="background:#4CAF50;">🔬 放置显微镜</button>
+        </div>
+    </div>
         <div class="control-group">
             <label>粗准焦螺旋 (大范围调焦)</label>
             <!-- <input type="range" class="slider" id="coarseFocus" min="0" max="100" value="50"> -->
@@ -583,6 +590,15 @@ const microscopeQuestionBank = {
         }
        
     ],
+    10: [ // 分类10：显微镜放置相关
+        {
+            id: 1001,
+            type: 'image',
+           src: "./xianweijingqufang.png",
+            title: "请选出正确答案",
+            answer: "D"
+        }
+    ]
     
 };
 
@@ -1037,7 +1053,6 @@ function switchObjective(index) {
  addLog(logTexts[index]);
    flashKnob('nosepiece');
    // 根据索引闪烁对应的物镜
- // 根据索引闪烁对应的物镜
     if (index === 0) {
         flashKnob('objective4x');
     } else if (index === 1) {
@@ -1066,6 +1081,20 @@ function switchObjective(index) {
         }
 
         function bindControls() {
+             // 新增：显微镜放置按钮点击事件
+    document.getElementById("placeMicroscopeBtn").onclick = () => {
+        if(microscopeState.isAnswering) return;
+        
+        // 直接弹出分类10的题目（显微镜放置相关）
+        showQuizModal(10);
+        
+        // 操作完成后添加日志
+        microscopeState.pendingOperation = () => {
+            addLog("🔬 显微镜已正确放置");
+            // 可以在这里添加显微镜放置的动画效果
+            // flashKnob('bodyTube'); // 闪烁镜筒作为反馈
+        };
+    };
             // 放置切片按钮
 document.getElementById("placeSlide").onclick = () => {
     if (!state.slidePlaced) {
